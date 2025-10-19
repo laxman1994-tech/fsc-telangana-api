@@ -7,12 +7,6 @@ const PORT = process.env.PORT || 10000;
 
 app.use(cors());
 
-// Determine the executable path based on the environment (Render's convention)
-// Render sets this environment variable during the build process
-const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || 
-                       '/usr/bin/google-chrome-stable' || 
-                       '/usr/bin/chromium';
-
 app.get("/fsc", async (req, res) => {
   const fscNo = req.query.no;
   if (!fscNo) {
@@ -21,15 +15,15 @@ app.get("/fsc", async (req, res) => {
 
   let browser;
   try {
-    // Launch headless browser (Puppeteer)
+    // Puppeteer launch with arguments necessary for stability in Render's Linux environment
     browser = await puppeteer.launch({
       headless: 'new', 
-      executablePath: executablePath, // Crucial fix for "Could not find Chrome" error
+      // Executable Path is often NOT needed if using the correct arguments and build process
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-gpu',
-        '--single-process', 
+        '--single-process', // Reduces memory and helps avoid crashes
         '--no-zygote'
       ],
       timeout: 30000 
@@ -58,7 +52,7 @@ app.get("/fsc", async (req, res) => {
 
     await page.waitForTimeout(5000); 
 
-    // --- Data Extraction Logic ---
+    // --- Data Extraction Logic (No change needed here) ---
     const data = await page.evaluate(() => {
       const getText = (label) => {
         const cell = [...document.querySelectorAll('td')]
@@ -110,8 +104,9 @@ app.get("/fsc", async (req, res) => {
     res.json(data);
     
   } catch (err) {
-    console.error("Puppeteer Error:", err.message);
-    res.status(500).json({ error: "Internal API Error during data fetching. Check logs for details." });
+    // If a timeout or navigation error occurs, we log it and send 500
+    console.error("Puppeteer/API Error:", err.message);
+    res.status(500).json({ error: "Internal API Error: Failed to complete scraping process." });
   } finally {
     if (browser) {
       await browser.close().catch(e => console.error("Error closing browser:", e));
